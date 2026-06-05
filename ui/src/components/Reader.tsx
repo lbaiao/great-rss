@@ -1,6 +1,6 @@
 import React from 'react';
 import { Article } from '../types';
-import { ArrowLeft, Bookmark, Type, ThumbsUp, Share2 } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, Bookmark, Type, Share2 } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface ReaderProps {
@@ -10,6 +10,15 @@ interface ReaderProps {
 }
 
 export const Reader: React.FC<ReaderProps> = ({ article, onBack, onToggleSaved }) => {
+  const handleShare = async () => {
+    if (navigator.share) {
+      await navigator.share({ title: article.title, url: article.url });
+      return;
+    }
+
+    await navigator.clipboard.writeText(article.url);
+  };
+
   return (
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
@@ -52,16 +61,18 @@ export const Reader: React.FC<ReaderProps> = ({ article, onBack, onToggleSaved }
         </div>
       </div>
 
-      <div className="my-16 relative">
+      {article.imageUrl ? (
+        <div className="my-16 relative">
         <img 
-          src="https://images.unsplash.com/photo-1481277542470-605612bd2d61?q=80&w=2006&auto=format&fit=crop" 
+          src={article.imageUrl}
           className="w-full h-[500px] object-cover border-2 border-black grayscale hover:grayscale-0 transition-all duration-1000 shadow-brutalist"
-          alt="Brutalist Architecture" 
+          alt="" 
         />
         <div className="absolute top-4 right-4 bg-white border border-black px-3 py-1 text-[8px] font-bold uppercase tracking-[0.3em]">
-          Ref: BK-L90
+          Source Image
         </div>
-      </div>
+        </div>
+      ) : null}
 
       {/* Article Content */}
       <div 
@@ -74,6 +85,24 @@ export const Reader: React.FC<ReaderProps> = ({ article, onBack, onToggleSaved }
         dangerouslySetInnerHTML={{ __html: article.content }}
       />
 
+      <div className="mb-16 border-2 border-black bg-white p-8 shadow-brutalist">
+        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-primary mb-3">
+          Continue Reading
+        </p>
+        <p className="text-sm font-bold leading-relaxed mb-6">
+          RSS publishers may provide only an excerpt. Open the original page for the complete article and publisher formatting.
+        </p>
+        <a
+          href={article.url}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-3 bg-black text-white px-6 py-3 text-[10px] font-black uppercase tracking-[0.2em] hover:bg-primary transition-colors"
+        >
+          <ArrowUpRight size={16} />
+          Read full article
+        </a>
+      </div>
+
       <div className="flex flex-wrap gap-3 mb-16">
         {article.tags.map(tag => (
           <span key={tag} className="px-4 py-1 border border-black/20 text-[10px] font-bold uppercase tracking-widest hover:border-black hover:bg-black hover:text-white transition-all cursor-pointer">{tag}</span>
@@ -81,10 +110,18 @@ export const Reader: React.FC<ReaderProps> = ({ article, onBack, onToggleSaved }
       </div>
 
       <div className="flex gap-4 border-t-4 border-black pt-16 pb-32">
-        <button className="flex items-center gap-3 bg-black text-white px-8 py-3 text-[10px] font-black uppercase tracking-[0.2em] hover:bg-primary transition-colors">
-          <ThumbsUp size={16} /> Helpful
-        </button>
-        <button className="flex items-center gap-3 border-2 border-black px-8 py-3 text-[10px] font-black uppercase tracking-[0.2em] hover:bg-black hover:text-white transition-colors">
+        <a
+          href={article.url}
+          target="_blank"
+          rel="noreferrer"
+          className="flex items-center gap-3 bg-black text-white px-8 py-3 text-[10px] font-black uppercase tracking-[0.2em] hover:bg-primary transition-colors"
+        >
+          <ArrowUpRight size={16} /> Original
+        </a>
+        <button
+          onClick={() => void handleShare()}
+          className="flex items-center gap-3 border-2 border-black px-8 py-3 text-[10px] font-black uppercase tracking-[0.2em] hover:bg-black hover:text-white transition-colors"
+        >
           <Share2 size={16} /> Share
         </button>
       </div>
