@@ -1,22 +1,26 @@
 import React from 'react';
-import { Search, RotateCw, CheckCheck, Settings } from 'lucide-react';
+import { LogOut, Search, RotateCw, CheckCheck } from 'lucide-react';
 
 interface DashboardHeaderProps {
   search: string;
   syncing: boolean;
   unreadCount: number;
+  userEmail?: string;
   onSearchChange: (value: string) => void;
   onSync: () => void;
   onMarkAllRead: () => void;
+  onSignOut: () => void;
 }
 
 export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
   search,
   syncing,
   unreadCount,
+  userEmail,
   onSearchChange,
   onSync,
   onMarkAllRead,
+  onSignOut,
 }) => {
   return (
     <header className="fixed top-0 right-0 left-0 md:left-64 z-50 bg-white border-b border-black flex justify-between items-center h-16 px-4 md:px-margin-desktop">
@@ -56,8 +60,11 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
           >
             <CheckCheck size={18} strokeWidth={3} />
           </button>
-          <button className="hover:text-primary transition-colors" title="Settings">
-            <Settings size={18} />
+          <div className="hidden xl:block max-w-44 truncate text-[10px] font-bold uppercase tracking-widest text-black/50">
+            {userEmail}
+          </div>
+          <button className="hover:text-primary transition-colors" title="Sign out" onClick={onSignOut}>
+            <LogOut size={18} />
           </button>
         </div>
       </div>

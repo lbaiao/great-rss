@@ -5,10 +5,15 @@ import { DashboardHeader } from './components/DashboardHeader';
 import { Dashboard } from './components/Dashboard';
 import { Reader } from './components/Reader';
 import { SourceManagement } from './components/Sources';
+import { AuthScreen } from './components/AuthScreen';
 import { LayoutDashboard, BookOpen, Rss, Settings } from 'lucide-react';
 import { addFeed, fetchBootstrap, markAllRead, syncAllFeeds, syncFeed, updateArticle } from './api';
+import { supabase } from './supabase';
+import type { Session } from '@supabase/supabase-js';
 
 export default function App() {
+  const [session, setSession] = useState<Session | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [view, setView] = useState<View>(View.DASHBOARD);
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
   const [articles, setArticles] = useState<Article[]>([]);
@@ -21,6 +26,63 @@ export default function App() {
   const [syncing, setSyncing] = useState(false);
   const [syncingFeedId, setSyncingFeedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const showEmptyState = () => {
+    setFeeds([]);
+    setCategories(['All News']);
+    setArticles([]);
+    setStats({ unreadCount: 0, savedCount: 0 });
+    setSelectedArticle(null);
+    setError(null);
+  };
+
+  const handleLoadError = (loadError: unknown, fallbackMessage: string) => {
+    if (isEmptyReadableError(loadError)) {
+      showEmptyState();
+      return;
+    }
+
+    setError(toUserFacingError(loadError, fallbackMessage));
+  };
+
+  useEffect(() => {
+    let mounted = true;
+
+    void supabase.auth.getSession().then(({ data, error: sessionError }) => {
+      if (!mounted) {
+        return;
+      }
+
+      if (sessionError) {
+        setError(sessionError.message);
+      }
+
+      setSession(data.session);
+      setAuthLoading(false);
+    });
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+      setError(null);
+
+      if (!nextSession) {
+        setView(View.DASHBOARD);
+        setSelectedArticle(null);
+        setArticles([]);
+        setFeeds([]);
+        setCategories(['All News']);
+        setActiveCategory('All News');
+        setSearch('');
+        setStats({ unreadCount: 0, savedCount: 0 });
+        setLoading(false);
+      }
+    });
+
+    return () => {
+      mounted = false;
+      listener.subscription.unsubscribe();
+    };
+  }, []);
 
   const handleArticleClick = (article: Article) => {
     setSelectedArticle(article);
@@ -58,33 +120,25 @@ export default function App() {
   };
 
   useEffect(() => {
-    const run = async () => {
-      try {
-        setLoading(true);
-        await loadState();
-        setError(null);
-      } catch (loadError) {
-        setError(loadError instanceof Error ? loadError.message : 'Failed to load feed state.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    void run();
-  }, []);
-
-  useEffect(() => {
-    if (view === View.ARCHIVE) {
-      void loadState({ saved: true }).catch((loadError) => {
-        setError(loadError instanceof Error ? loadError.message : 'Failed to load saved articles.');
-      });
+    if (!session || authLoading) {
       return;
     }
 
-    void loadState().catch((loadError) => {
-      setError(loadError instanceof Error ? loadError.message : 'Failed to refresh articles.');
-    });
-  }, [activeCategory, search, view]);
+    setLoading(true);
+
+    if (view === View.ARCHIVE) {
+      void loadState({ saved: true })
+        .then(() => setError(null))
+        .catch((loadError) => handleLoadError(loadError, 'Failed to load saved articles.'))
+        .finally(() => setLoading(false));
+      return;
+    }
+
+    void loadState()
+      .then(() => setError(null))
+      .catch((loadError) => handleLoadError(loadError, 'Failed to refresh articles.'))
+      .finally(() => setLoading(false));
+  }, [activeCategory, authLoading, search, session?.user.id, view]);
 
   useEffect(() => {
     if (!selectedArticle) {
@@ -98,7 +152,7 @@ export default function App() {
   }, [articles, selectedArticle]);
 
   useEffect(() => {
-    if (!selectedArticle || !selectedArticle.unread) {
+    if (!session || !selectedArticle || !selectedArticle.unread) {
       return;
     }
 
@@ -112,7 +166,7 @@ export default function App() {
         }));
       })
       .catch(() => {});
-  }, [selectedArticle?.id]);
+  }, [selectedArticle?.id, session?.user.id]);
 
   const archiveArticles = articles.filter((article) => article.saved);
 
@@ -123,7 +177,7 @@ export default function App() {
       await syncAllFeeds();
       await loadState({ saved: view === View.ARCHIVE });
     } catch (syncError) {
-      setError(syncError instanceof Error ? syncError.message : 'Sync failed.');
+      setError(toUserFacingError(syncError, 'Sync failed.'));
     } finally {
       setSyncing(false);
     }
@@ -134,7 +188,7 @@ export default function App() {
       await markAllRead();
       await loadState({ saved: view === View.ARCHIVE });
     } catch (markError) {
-      setError(markError instanceof Error ? markError.message : 'Failed to mark all read.');
+      setError(toUserFacingError(markError, 'Failed to mark all read.'));
     }
   };
 
@@ -151,13 +205,29 @@ export default function App() {
         savedCount: Math.max(0, current.savedCount + (updated.saved ? 1 : -1)),
       }));
     } catch (toggleError) {
-      setError(toggleError instanceof Error ? toggleError.message : 'Failed to save article.');
+      if (isEmptyReadableError(toggleError)) {
+        showEmptyState();
+        return;
+      }
+
+      setError(toUserFacingError(toggleError, 'Failed to save article.'));
     }
   };
 
   const handleAddFeed = async (url: string) => {
-    await addFeed(url);
-    await loadState();
+    try {
+      setSyncing(true);
+      setError(null);
+      const feed = await addFeed(url);
+      setSyncingFeedId(feed.id);
+      await syncFeed(feed.id);
+      await loadState();
+    } catch (syncError) {
+      setError(toUserFacingError(syncError, 'Feed sync failed.'));
+    } finally {
+      setSyncing(false);
+      setSyncingFeedId(null);
+    }
   };
 
   const handleFeedSync = async (feedId: string) => {
@@ -168,10 +238,18 @@ export default function App() {
       await syncFeed(feedId);
       await loadState();
     } catch (syncError) {
-      setError(syncError instanceof Error ? syncError.message : 'Feed sync failed.');
+      setError(toUserFacingError(syncError, 'Feed sync failed.'));
     } finally {
       setSyncing(false);
       setSyncingFeedId(null);
+    }
+  };
+
+  const handleSignOut = async () => {
+    const { error: signOutError } = await supabase.auth.signOut();
+
+    if (signOutError) {
+      setError(signOutError.message);
     }
   };
 
@@ -250,6 +328,20 @@ export default function App() {
     }
   };
 
+  if (authLoading) {
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-background px-4">
+        <div className="border border-black bg-white brutalist-shadow-small px-6 py-4 text-label-sm">
+          Checking session
+        </div>
+      </main>
+    );
+  }
+
+  if (!session) {
+    return <AuthScreen />;
+  }
+
   return (
     <div className="min-h-screen">
       <Sidebar activeView={view} onViewChange={setView} />
@@ -259,13 +351,15 @@ export default function App() {
           search={search}
           syncing={syncing}
           unreadCount={stats.unreadCount}
+          userEmail={session.user.email}
           onSearchChange={setSearch}
           onSync={() => void handleSync()}
           onMarkAllRead={() => void handleMarkAllRead()}
+          onSignOut={() => void handleSignOut()}
         />
         
         <main className="mt-16 px-4 md:px-margin-desktop min-h-[calc(100vh-64px)] overflow-y-auto">
-          {error ? (
+          {error && !isEmptyReadableMessage(error) ? (
             <div className="reading-column pt-6">
               <div className="border border-black bg-white px-4 py-3 text-sm font-bold uppercase tracking-wide text-primary">
                 {error}
@@ -307,5 +401,32 @@ export default function App() {
         </button>
       </nav>
     </div>
+  );
+}
+
+function toUserFacingError(error: unknown, fallbackMessage: string) {
+  if (isEmptyReadableError(error)) {
+    return 'Empty. Add a source, then sync to load articles.';
+  }
+
+  return error instanceof Error ? error.message : fallbackMessage;
+}
+
+function isEmptyReadableError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return isEmptyReadableMessage(error.message);
+}
+
+function isEmptyReadableMessage(message: string) {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes('permission denied') ||
+    normalized.includes('row-level security') ||
+    normalized.includes('rls') ||
+    normalized.includes('0 rows') ||
+    normalized.includes('no rows')
   );
 }

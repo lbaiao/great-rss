@@ -28,6 +28,12 @@ type ArticleRow = {
   url: string;
 };
 
+type ArticleStateRow = {
+  article_id: string;
+  unread: boolean;
+  saved: boolean;
+};
+
 export function fetchBootstrap(params?: {
   category?: string;
   search?: string;
@@ -38,11 +44,12 @@ export function fetchBootstrap(params?: {
 }
 
 export async function addFeed(url: string, category = 'General') {
+  const userId = await requireCurrentUserId();
   const payload = {
+    user_id: userId,
     url,
     category,
     name: deriveFeedName(url),
-    status: 'idle' as const,
   };
 
   const { data, error } = await supabase
@@ -52,7 +59,7 @@ export async function addFeed(url: string, category = 'General') {
     .single();
 
   if (error) {
-    throw new Error(error.message);
+    throwApiError(error.message);
   }
 
   return mapFeed(data);
@@ -67,30 +74,62 @@ export async function syncFeed(feedId: string) {
 }
 
 export async function updateArticle(articleId: string, patch: Partial<Pick<Article, 'unread' | 'saved'>>) {
-  const { data, error } = await supabase
-    .from('articles')
-    .update(toArticlePatch(patch))
-    .eq('id', articleId)
-    .select(
-      'id, source, title, snippet, content, author, published_at, category, read_time_minutes, unread, saved, image_url, tags, url',
-    )
+  const userId = await requireCurrentUserId();
+  const currentState = await loadArticleState(userId, articleId);
+  const nextState = {
+    user_id: userId,
+    article_id: articleId,
+    unread: typeof patch.unread === 'boolean' ? patch.unread : currentState?.unread ?? true,
+    saved: typeof patch.saved === 'boolean' ? patch.saved : currentState?.saved ?? false,
+  };
+
+  const { data: state, error } = await supabase
+    .from('user_article_states')
+    .upsert(nextState, { onConflict: 'user_id,article_id' })
+    .select('article_id, unread, saved')
     .single();
 
   if (error) {
-    throw new Error(error.message);
+    throwApiError(error.message);
   }
 
-  return mapArticle(data);
+  return loadArticle(articleId, state);
 }
 
 export async function markAllRead() {
-  const { error } = await supabase
-    .from('articles')
-    .update({ unread: false })
-    .eq('unread', true);
+  const userId = await requireCurrentUserId();
+  const [{ data: articles, error: articlesError }, { data: states, error: statesError }] = await Promise.all([
+    supabase.from('articles').select('id'),
+    supabase.from('user_article_states').select('article_id, unread, saved').eq('user_id', userId),
+  ]);
 
-  if (error) {
-    throw new Error(error.message);
+  if (articlesError) {
+    throwApiError(articlesError.message);
+  }
+
+  if (statesError) {
+    throwApiError(statesError.message);
+  }
+
+  const stateByArticleId = new Map((states ?? []).map((state) => [state.article_id, state]));
+  const rows = (articles ?? []).map((article) => {
+    const current = stateByArticleId.get(article.id);
+    return {
+      user_id: userId,
+      article_id: article.id,
+      unread: false,
+      saved: current?.saved ?? false,
+    };
+  });
+
+  if (rows.length > 0) {
+    const { error } = await supabase
+      .from('user_article_states')
+      .upsert(rows, { onConflict: 'user_id,article_id' });
+
+    if (error) {
+      throwApiError(error.message);
+    }
   }
 
   return { ok: true as const };
@@ -102,7 +141,8 @@ async function loadBootstrap(params?: {
   saved?: boolean;
   articleId?: string;
 }): Promise<BootstrapPayload> {
-  const [feedsResult, articlesResult] = await Promise.all([
+  const userId = await requireCurrentUserId();
+  const [feedsResult, articlesResult, statesResult] = await Promise.all([
     supabase
       .from('feeds')
       .select('id, url, name, category, status, last_synced_at, last_error')
@@ -113,17 +153,26 @@ async function loadBootstrap(params?: {
         'id, source, title, snippet, content, author, published_at, category, read_time_minutes, unread, saved, image_url, tags, url',
       )
       .order('published_at', { ascending: false }),
+    supabase
+      .from('user_article_states')
+      .select('article_id, unread, saved')
+      .eq('user_id', userId),
   ]);
 
   if (feedsResult.error) {
-    throw new Error(feedsResult.error.message);
+    throwApiError(feedsResult.error.message);
   }
 
   if (articlesResult.error) {
-    throw new Error(articlesResult.error.message);
+    throwApiError(articlesResult.error.message);
   }
 
-  let articles = (articlesResult.data ?? []).map(mapArticle);
+  if (statesResult.error) {
+    throwApiError(statesResult.error.message);
+  }
+
+  const stateByArticleId = new Map((statesResult.data ?? []).map((state) => [state.article_id, state]));
+  let articles = (articlesResult.data ?? []).map((row) => mapArticle(row, stateByArticleId.get(row.id)));
 
   if (params?.saved) {
     articles = articles.filter((article) => article.saved);
@@ -142,7 +191,7 @@ async function loadBootstrap(params?: {
     );
   }
 
-  const allArticles = (articlesResult.data ?? []).map(mapArticle);
+  const allArticles = (articlesResult.data ?? []).map((row) => mapArticle(row, stateByArticleId.get(row.id)));
   const selectedArticle = params?.articleId
     ? allArticles.find((article) => article.id === params.articleId) ?? null
     : null;
@@ -160,22 +209,74 @@ async function loadBootstrap(params?: {
 }
 
 async function invokeSync(feedId?: string) {
+  const { data } = await supabase.auth.getSession();
+  const accessToken = data.session?.access_token;
+
+  if (!accessToken) {
+    throw new Error('Sign in required to sync feeds.');
+  }
+
   const response = await fetch(`${getFunctionsBaseUrl()}/sync-feeds`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-      Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+      Authorization: `Bearer ${accessToken}`,
     },
     body: JSON.stringify(feedId ? { feedId } : {}),
   });
 
   if (!response.ok) {
     const payload = (await response.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(payload?.error || `Sync failed with status ${response.status}.`);
+    throwApiError(payload?.error || `Sync failed with status ${response.status}.`);
   }
 
   return (await response.json()) as { ok: true; feeds: number; inserted: number };
+}
+
+async function requireCurrentUserId() {
+  const { data, error } = await supabase.auth.getUser();
+
+  if (error) {
+    throwApiError(error.message);
+  }
+
+  if (!data.user) {
+    throw new Error('Sign in required.');
+  }
+
+  return data.user.id;
+}
+
+async function loadArticleState(userId: string, articleId: string) {
+  const { data, error } = await supabase
+    .from('user_article_states')
+    .select('article_id, unread, saved')
+    .eq('user_id', userId)
+    .eq('article_id', articleId)
+    .maybeSingle();
+
+  if (error) {
+    throwApiError(error.message);
+  }
+
+  return data;
+}
+
+async function loadArticle(articleId: string, state?: ArticleStateRow | null) {
+  const { data, error } = await supabase
+    .from('articles')
+    .select(
+      'id, source, title, snippet, content, author, published_at, category, read_time_minutes, unread, saved, image_url, tags, url',
+    )
+    .eq('id', articleId)
+    .single();
+
+  if (error) {
+    throwApiError(error.message);
+  }
+
+  return mapArticle(data, state);
 }
 
 function mapFeed(row: FeedRow): Feed {
@@ -186,11 +287,11 @@ function mapFeed(row: FeedRow): Feed {
     category: row.category,
     status: row.status,
     lastSyncedAt: row.last_synced_at,
-    lastError: row.last_error,
+    lastError: sanitizeRemoteMessage(row.last_error),
   };
 }
 
-function mapArticle(row: ArticleRow): Article {
+function mapArticle(row: ArticleRow, state?: ArticleStateRow | null): Article {
   return {
     id: row.id,
     source: row.source,
@@ -203,23 +304,37 @@ function mapArticle(row: ArticleRow): Article {
     category: row.category,
     readTime: `${row.read_time_minutes} min read`,
     timeAgo: formatTimeAgo(row.published_at),
-    unread: row.unread,
-    saved: row.saved,
+    unread: state?.unread ?? true,
+    saved: state?.saved ?? false,
     imageUrl: row.image_url ?? undefined,
     tags: row.tags ?? [],
     url: row.url,
   };
 }
 
-function toArticlePatch(patch: Partial<Pick<Article, 'unread' | 'saved'>>) {
-  return {
-    ...(typeof patch.unread === 'boolean' ? { unread: patch.unread } : {}),
-    ...(typeof patch.saved === 'boolean' ? { saved: patch.saved } : {}),
-  };
-}
-
 function buildCategories(articles: Article[]) {
   return ['All News', ...Array.from(new Set(articles.map((article) => article.category).filter(Boolean)))];
+}
+
+function throwApiError(message: string): never {
+  throw new Error(sanitizeRemoteMessage(message) ?? 'Request failed.');
+}
+
+function sanitizeRemoteMessage(message: string | null) {
+  if (!message) {
+    return null;
+  }
+
+  const normalized = message.toLowerCase();
+  if (
+    normalized.includes('permission denied') ||
+    normalized.includes('row-level security') ||
+    normalized.includes('rls')
+  ) {
+    return 'Empty. Add a source, then sync to load articles.';
+  }
+
+  return message;
 }
 
 function deriveFeedName(url: string) {

@@ -46,7 +46,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
         {!loading && articles.length === 0 ? (
           <div className="border border-black bg-white p-8 font-bold uppercase tracking-wide">
-            No articles match this view yet.
+            Empty. Add a source, then sync to load articles.
           </div>
         ) : null}
 

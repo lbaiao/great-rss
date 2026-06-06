@@ -4,6 +4,7 @@ import { XMLParser } from "npm:fast-xml-parser@4.5.0";
 
 type FeedRow = {
   id: string;
+  user_id: string;
   url: string;
   name: string;
   category: string;
@@ -53,12 +54,18 @@ Deno.serve(async (request) => {
     return json({ error: "Method not allowed." }, 405);
   }
 
+  const userId = await getRequestUserId(request);
+  if (!userId) {
+    return json({ error: "Sign in required." }, 401);
+  }
+
   const body = await request.json().catch(() => ({}));
   const feedId = typeof body.feedId === "string" ? body.feedId : null;
 
   const feedQuery = supabaseAdmin
     .from("feeds")
-    .select("id, url, name, category")
+    .select("id, user_id, url, name, category")
+    .eq("user_id", userId)
     .order("created_at", { ascending: true });
 
   const { data: feeds, error } = feedId
@@ -82,6 +89,7 @@ Deno.serve(async (request) => {
       await supabaseAdmin
         .from("feeds")
         .update({ status: "error", last_error: message })
+        .eq("user_id", feed.user_id)
         .eq("id", feed.id);
       results.push({ feedId: feed.id, inserted: 0, error: message });
     }
@@ -112,6 +120,7 @@ async function syncFeed(supabase: SupabaseClient, feed: FeedRow) {
   const rows = await Promise.all(parsed.items.map(async (item) => {
     const fingerprint = await sha1(`${feed.id}|${item.link}|${item.title}|${item.publishedAt}`);
     return {
+      user_id: feed.user_id,
       feed_id: feed.id,
       source: parsed.title || feed.name,
       title: item.title || "Untitled article",
@@ -137,6 +146,7 @@ async function syncFeed(supabase: SupabaseClient, feed: FeedRow) {
     const { data: existingRows, error: existingError } = await supabase
       .from("articles")
       .select("fingerprint")
+      .eq("user_id", feed.user_id)
       .in("fingerprint", fingerprints);
 
     if (existingError) {
@@ -169,9 +179,26 @@ async function syncFeed(supabase: SupabaseClient, feed: FeedRow) {
       last_error: null,
       last_synced_at: new Date().toISOString(),
     })
+    .eq("user_id", feed.user_id)
     .eq("id", feed.id);
 
   return { feedId: feed.id, inserted, itemCount: rows.length, newRowCount };
+}
+
+async function getRequestUserId(request: Request): Promise<string | null> {
+  const authHeader = request.headers.get("Authorization") ?? "";
+  const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+
+  if (!token) {
+    return null;
+  }
+
+  const { data, error } = await supabaseAdmin.auth.getUser(token);
+  if (error || !data.user) {
+    return null;
+  }
+
+  return data.user.id;
 }
 
 function parseFeedDocument(raw: string, contentType: string, sourceUrl: string): ParsedFeed {
