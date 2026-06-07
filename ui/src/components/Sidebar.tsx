@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, BookOpen, Rss, HelpCircle, Archive, Plus } from 'lucide-react';
+import { LayoutDashboard, Rss, HelpCircle, Archive, Plus } from 'lucide-react';
 import { View } from '../types';
 import { motion } from 'motion/react';
 
@@ -11,7 +11,6 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange }) => {
   const navItems = [
     { id: View.DASHBOARD, label: 'Dashboard', icon: LayoutDashboard },
-    { id: View.READER, label: 'Reader', icon: BookOpen },
     { id: View.SOURCES, label: 'Sources', icon: Rss },
   ];
 

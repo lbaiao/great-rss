@@ -3,11 +3,10 @@ import { View, Article, Feed } from './types';
 import { Sidebar } from './components/Sidebar';
 import { DashboardHeader } from './components/DashboardHeader';
 import { Dashboard } from './components/Dashboard';
-import { Reader } from './components/Reader';
 import { SourceManagement } from './components/Sources';
 import { AuthScreen } from './components/AuthScreen';
-import { LayoutDashboard, BookOpen, Rss, Settings } from 'lucide-react';
-import { addFeed, fetchBootstrap, markAllRead, syncAllFeeds, syncFeed, updateArticle } from './api';
+import { LayoutDashboard, Rss, Settings } from 'lucide-react';
+import { addFeed, deleteFeed, fetchBootstrap, markAllRead, syncAllFeeds, syncFeed, updateArticle } from './api';
 import { supabase } from './supabase';
 import type { Session } from '@supabase/supabase-js';
 
@@ -83,11 +82,6 @@ export default function App() {
       listener.subscription.unsubscribe();
     };
   }, []);
-
-  const handleArticleClick = (article: Article) => {
-    setSelectedArticle(article);
-    setView(View.READER);
-  };
 
   const loadState = async (overrides?: {
     category?: string;
@@ -245,6 +239,16 @@ export default function App() {
     }
   };
 
+  const handleDeleteFeed = async (feedId: string) => {
+    try {
+      setError(null);
+      await deleteFeed(feedId);
+      await loadState({ saved: view === View.ARCHIVE });
+    } catch (deleteError) {
+      setError(toUserFacingError(deleteError, 'Failed to delete source.'));
+    }
+  };
+
   const handleSignOut = async () => {
     const { error: signOutError } = await supabase.auth.signOut();
 
@@ -262,24 +266,6 @@ export default function App() {
             categories={categories}
             activeCategory={activeCategory}
             onCategoryChange={setActiveCategory}
-            onArticleClick={handleArticleClick}
-            loading={loading}
-          />
-        );
-      case View.READER:
-        return selectedArticle ? (
-          <Reader
-            article={selectedArticle}
-            onBack={() => setView(View.DASHBOARD)}
-            onToggleSaved={() => void handleToggleSaved(selectedArticle)}
-          />
-        ) : (
-          <Dashboard
-            articles={articles}
-            categories={categories}
-            activeCategory={activeCategory}
-            onCategoryChange={setActiveCategory}
-            onArticleClick={handleArticleClick}
             loading={loading}
           />
         );
@@ -289,6 +275,7 @@ export default function App() {
             feeds={feeds}
             onAddFeed={(url) => void handleAddFeed(url)}
             onSyncFeed={(feedId) => void handleFeedSync(feedId)}
+            onDeleteFeed={(feedId) => void handleDeleteFeed(feedId)}
             syncing={syncing}
             syncingFeedId={syncingFeedId}
           />
@@ -309,7 +296,6 @@ export default function App() {
               categories={['Saved']}
               activeCategory="Saved"
               onCategoryChange={() => {}}
-              onArticleClick={handleArticleClick}
               loading={loading}
             />
           </div>
@@ -321,7 +307,6 @@ export default function App() {
             categories={categories}
             activeCategory={activeCategory}
             onCategoryChange={setActiveCategory}
-            onArticleClick={handleArticleClick}
             loading={loading}
           />
         );
@@ -378,13 +363,6 @@ export default function App() {
         >
           <LayoutDashboard size={18} strokeWidth={view === View.DASHBOARD ? 3 : 2} />
           <span className="text-[10px] font-bold uppercase tracking-widest leading-none mt-1">Dash</span>
-        </button>
-        <button 
-          onClick={() => setView(View.READER)}
-          className={`flex flex-col items-center justify-center gap-1 transition-colors ${view === View.READER ? 'text-primary' : 'text-black/40'}`}
-        >
-          <BookOpen size={18} strokeWidth={view === View.READER ? 3 : 2} />
-          <span className="text-[10px] font-bold uppercase tracking-widest leading-none mt-1">Read</span>
         </button>
         <button 
           onClick={() => setView(View.SOURCES)}

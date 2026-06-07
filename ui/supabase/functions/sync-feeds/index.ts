@@ -315,7 +315,7 @@ function parseAtomObject(feed: Record<string, unknown>, sourceUrl: string): Pars
 }
 
 function summarizeHtml(html: string): string {
-  return truncate(stripHtml(html), 180);
+  return stripHtml(html);
 }
 
 function stripHtml(value: string): string {
@@ -364,13 +364,6 @@ function deriveFeedName(url: string): string {
   } catch {
     return "New Feed";
   }
-}
-
-function truncate(value: string, maxLength: number): string {
-  if (value.length <= maxLength) {
-    return value;
-  }
-  return `${value.slice(0, maxLength - 1).trimEnd()}…`;
 }
 
 async function sha1(value: string) {

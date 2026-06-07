@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Info, RotateCw } from 'lucide-react';
+import { Info, RotateCw, Trash2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { Feed } from '../types';
 
@@ -9,6 +9,7 @@ interface SourceManagementProps {
   syncingFeedId: string | null;
   onAddFeed: (url: string) => void;
   onSyncFeed: (feedId: string) => void;
+  onDeleteFeed: (feedId: string) => void;
 }
 
 export const SourceManagement: React.FC<SourceManagementProps> = ({
@@ -17,6 +18,7 @@ export const SourceManagement: React.FC<SourceManagementProps> = ({
   syncingFeedId,
   onAddFeed,
   onSyncFeed,
+  onDeleteFeed,
 }) => {
   const [url, setUrl] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -95,7 +97,7 @@ export const SourceManagement: React.FC<SourceManagementProps> = ({
           <h3 className="text-[10px] font-black text-black uppercase tracking-[0.3em] mb-6 inline-block border-b-2 border-primary pb-2">Active Transmissions</h3>
           <div className="grid grid-cols-1 gap-4">
             {feeds.map((feed) => (
-              <div key={feed.id} className="flex items-center justify-between p-6 bg-white border border-black hover:shadow-brutalist-small transition-all">
+              <div key={feed.id} className="flex flex-col gap-5 p-6 bg-white border border-black hover:shadow-brutalist-small transition-all sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <span className="text-lg font-black uppercase tracking-tighter">
                     {feed.name} // {feed.status.toUpperCase()}
@@ -107,14 +109,28 @@ export const SourceManagement: React.FC<SourceManagementProps> = ({
                     <p className="text-xs font-bold uppercase tracking-wider text-primary mt-2">{feed.lastError}</p>
                   ) : null}
                 </div>
-                <button
-                  onClick={() => void onSyncFeed(feed.id)}
-                  disabled={syncing}
-                  className="flex items-center gap-2 border border-black px-3 py-2 text-[10px] font-bold uppercase tracking-widest hover:bg-black hover:text-white disabled:opacity-50"
-                >
-                  <RotateCw size={14} className={syncingFeedId === feed.id ? 'animate-spin' : ''} />
-                  {syncingFeedId === feed.id ? 'Syncing' : 'Sync'}
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => void onSyncFeed(feed.id)}
+                    disabled={syncing}
+                    className="flex items-center gap-2 border border-black px-3 py-2 text-[10px] font-bold uppercase tracking-widest hover:bg-black hover:text-white disabled:opacity-50"
+                  >
+                    <RotateCw size={14} className={syncingFeedId === feed.id ? 'animate-spin' : ''} />
+                    {syncingFeedId === feed.id ? 'Syncing' : 'Sync'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (window.confirm(`Delete ${feed.name}? This removes its articles from your account.`)) {
+                        onDeleteFeed(feed.id);
+                      }
+                    }}
+                    disabled={syncing}
+                    title="Delete source"
+                    className="flex h-9 w-9 items-center justify-center border border-black text-primary hover:bg-primary hover:text-white disabled:opacity-50"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               </div>
             ))}
             {feeds.length === 0 ? (

@@ -8,7 +8,6 @@ interface DashboardProps {
   activeCategory: string;
   loading: boolean;
   onCategoryChange: (category: string) => void;
-  onArticleClick: (article: Article) => void;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
@@ -17,7 +16,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
   activeCategory,
   loading,
   onCategoryChange,
-  onArticleClick,
 }) => {
   return (
     <div className="reading-column py-12">
@@ -52,7 +50,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
         {articles.map((article, index) => (
           <React.Fragment key={article.id}>
-            <ArticleCard article={article} onClick={onArticleClick} />
+            <ArticleCard article={article} />
             {index === 1 && (
               <div className="my-8 relative overflow-hidden group">
                 <img 

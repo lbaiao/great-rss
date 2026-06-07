@@ -73,6 +73,19 @@ export async function syncFeed(feedId: string) {
   return invokeSync(feedId);
 }
 
+export async function deleteFeed(feedId: string) {
+  const { error } = await supabase
+    .from('feeds')
+    .delete()
+    .eq('id', feedId);
+
+  if (error) {
+    throwApiError(error.message);
+  }
+
+  return { ok: true as const };
+}
+
 export async function updateArticle(articleId: string, patch: Partial<Pick<Article, 'unread' | 'saved'>>) {
   const userId = await requireCurrentUserId();
   const currentState = await loadArticleState(userId, articleId);
