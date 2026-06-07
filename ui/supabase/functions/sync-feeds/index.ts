@@ -124,7 +124,7 @@ async function syncFeed(supabase: SupabaseClient, feed: FeedRow) {
       feed_id: feed.id,
       source: parsed.title || feed.name,
       title: item.title || "Untitled article",
-      snippet: item.snippet || summarizeHtml(item.content),
+      snippet: item.snippet,
       content: item.content || wrapParagraphs(item.snippet || "No content available."),
       author: item.author || parsed.title || feed.name,
       published_at: item.publishedAt || new Date().toISOString(),
@@ -233,7 +233,7 @@ function parseJsonFeed(raw: string, sourceUrl: string): ParsedFeed {
       title: item.title || "Untitled article",
       link: item.url || item.external_url || sourceUrl,
       content: item.content_html || wrapParagraphs(item.content_text || item.summary || ""),
-      snippet: item.summary || stripHtml(item.content_text || item.content_html || ""),
+      snippet: item.summary || "",
       author: item.authors?.map((author) => author.name).filter(Boolean).join(", ") || "",
       publishedAt: item.date_published || new Date().toISOString(),
       tags: item.tags ?? [],
@@ -264,15 +264,16 @@ function parseRssObject(rss: Record<string, unknown>, sourceUrl: string): Parsed
   const channelTitle = readText(channel?.title) || deriveFeedName(sourceUrl);
   const items = asArray(channel?.item).map((itemValue) => {
     const item = asRecord(itemValue);
+    const description = readText(item?.description);
     const content =
       readText(item?.["content:encoded"]) ||
-      readText(item?.description) ||
+      description ||
       wrapParagraphs(readText(item?.title) || "");
     return {
       title: readText(item?.title) || "Untitled article",
       link: readText(item?.link) || sourceUrl,
       content,
-      snippet: summarizeHtml(content),
+      snippet: stripHtml(description),
       author: readText(item?.["dc:creator"]) || readText(item?.author) || channelTitle,
       publishedAt: normalizeDate(readText(item?.pubDate) || readText(item?.["dc:date"])),
       tags: asArray(item?.category).map((entry) => readText(entry)).filter(Boolean),
@@ -301,7 +302,7 @@ function parseAtomObject(feed: Record<string, unknown>, sourceUrl: string): Pars
       title: readText(entry?.title) || "Untitled article",
       link,
       content,
-      snippet: summary || summarizeHtml(content),
+      snippet: summary,
       author: readText(asRecord(entry?.author)?.name) || title,
       publishedAt: normalizeDate(readText(entry?.published) || readText(entry?.updated)),
       tags: asArray(entry?.category)
@@ -312,10 +313,6 @@ function parseAtomObject(feed: Record<string, unknown>, sourceUrl: string): Pars
   });
 
   return { title, items };
-}
-
-function summarizeHtml(html: string): string {
-  return stripHtml(html);
 }
 
 function stripHtml(value: string): string {
