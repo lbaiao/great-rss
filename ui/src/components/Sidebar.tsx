@@ -22,8 +22,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange }) =>
   return (
     <aside className="hidden md:flex fixed left-0 top-0 h-full w-64 z-40 flex-col bg-white border-r border-black">
       <div className="px-6 py-10 flex flex-col gap-2">
-        <span className="text-display-lg font-black text-black tracking-tighter">Chroma.</span>
-        <span className="text-label-sm opacity-60">Studio Feed</span>
+        <span className="text-[40px] font-black uppercase leading-none text-black">GreatRSS</span>
+        <span className="text-label-sm opacity-60">RSS Reader</span>
       </div>
       
       <nav className="flex-1 mt-8">

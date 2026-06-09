@@ -25,7 +25,7 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
   return (
     <header className="fixed top-0 right-0 left-0 md:left-64 z-50 bg-white border-b border-black flex justify-between items-center h-16 px-4 md:px-margin-desktop">
       <div className="flex items-center gap-4">
-        <h1 className="text-headline-md font-black text-black">Chroma Studio</h1>
+        <h1 className="text-headline-md font-black text-black">GreatRSS</h1>
         <div className="px-3 py-0.5 border border-black rounded-full text-[10px] font-bold uppercase ml-4 hidden sm:block">
           {unreadCount} Unread
         </div>
@@ -38,7 +38,7 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
             value={search}
             onChange={(event) => onSearchChange(event.target.value)}
             className="bg-transparent border-none focus:outline-none text-body-md w-48 py-1 placeholder:text-black/30 font-bold" 
-            placeholder="Search stream..." 
+            placeholder="Search GreatRSS..."
             type="text"
           />
         </div>

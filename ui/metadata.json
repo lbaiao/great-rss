@@ -1,6 +1,6 @@
 {
-  "name": "Chronicle RSS",
-  "description": "An objective, minimalist RSS reader inspired by Swiss design principles, featuring a distraction-free reading experience and precise typographic control.",
+  "name": "GreatRSS",
+  "description": "A responsive RSS reader backed by Supabase.",
   "requestFramePermissions": [],
   "majorCapabilities": []
 }
