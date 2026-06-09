@@ -44,10 +44,10 @@ export const SourceManagement: React.FC<SourceManagementProps> = ({
         animate={{ opacity: 1, x: 0 }}
         className="mb-16"
       >
-        <span className="text-[10px] font-bold text-primary uppercase tracking-[0.5em] mb-4 block">Assignment // 03</span>
-        <h1 className="text-7xl font-black text-black mb-6 tracking-tighter uppercase leading-[0.85]">Source<br/>Control</h1>
+        <span className="text-[10px] font-bold text-primary uppercase tracking-[0.5em] mb-4 block">GreatRSS Sources</span>
+        <h1 className="text-7xl font-black text-black mb-6 tracking-tighter uppercase leading-[0.85]">Sources</h1>
         <p className="text-body-lg text-black/60 italic max-w-md">
-          Configure your news engine. Add new stream endpoints or reorganize your existing editorial subscriptions.
+          Add RSS, Atom, or JSON Feed sources to GreatRSS.
         </p>
       </motion.div>
 
@@ -64,7 +64,7 @@ export const SourceManagement: React.FC<SourceManagementProps> = ({
               <input 
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://chroma.studio/rss"
+                placeholder="https://example.com/rss"
                 className="w-full bg-background border border-black p-4 text-body-md font-bold focus:bg-white focus:outline-none transition-all"
                 type="text"
               />
@@ -89,7 +89,7 @@ export const SourceManagement: React.FC<SourceManagementProps> = ({
             <Info size={24} className="text-white" />
           </div>
           <p className="text-sm font-bold uppercase tracking-wider leading-relaxed opacity-60">
-            CHROMA STUDIO SUPPORTS RSS 2.0, ATOM 1.0, AND JSON FEED FORMATS. SECURE HANDSHAKE IS MANDATORY FOR ALL ENDPOINTS.
+            GreatRSS supports RSS 2.0, Atom 1.0, and JSON Feed formats.
           </p>
         </motion.div>
 

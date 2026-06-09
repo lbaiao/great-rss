@@ -27,6 +27,7 @@ type ParsedFeed = {
 const secretKeysJson = Deno.env.get("SUPABASE_SECRET_KEYS");
 const supabaseUrl = Deno.env.get("SUPABASE_URL");
 const secretKey = resolveDefaultSecretKey(secretKeysJson);
+const ARTICLE_RETENTION_DAYS = 30;
 
 if (!supabaseUrl || !secretKey) {
   throw new Error("SUPABASE_URL and the default Supabase secret key are required.");
@@ -77,7 +78,14 @@ Deno.serve(async (request) => {
   }
 
   let inserted = 0;
-  const results: Array<{ feedId: string; inserted: number; itemCount?: number; newRowCount?: number; error?: string }> = [];
+  const results: Array<{
+    feedId: string;
+    inserted: number;
+    itemCount?: number;
+    skippedExpired?: number;
+    newRowCount?: number;
+    error?: string;
+  }> = [];
 
   for (const feed of feeds satisfies FeedRow[]) {
     try {
@@ -117,7 +125,10 @@ async function syncFeed(supabase: SupabaseClient, feed: FeedRow) {
 
   const raw = await response.text();
   const parsed = parseFeedDocument(raw, response.headers.get("content-type") ?? "", feed.url);
-  const rows = await Promise.all(parsed.items.map(async (item) => {
+  const retentionCutoffMs = Date.now() - ARTICLE_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  const retainedItems = parsed.items.filter((item) => Date.parse(item.publishedAt) >= retentionCutoffMs);
+  const skippedExpired = parsed.items.length - retainedItems.length;
+  const rows = await Promise.all(retainedItems.map(async (item) => {
     const fingerprint = await sha1(`${feed.id}|${item.link}|${item.title}|${item.publishedAt}`);
     return {
       user_id: feed.user_id,
@@ -182,7 +193,7 @@ async function syncFeed(supabase: SupabaseClient, feed: FeedRow) {
     .eq("user_id", feed.user_id)
     .eq("id", feed.id);
 
-  return { feedId: feed.id, inserted, itemCount: rows.length, newRowCount };
+  return { feedId: feed.id, inserted, itemCount: parsed.items.length, skippedExpired, newRowCount };
 }
 
 async function getRequestUserId(request: Request): Promise<string | null> {
