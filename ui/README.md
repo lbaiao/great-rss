@@ -8,6 +8,7 @@ Responsive RSS reader backed by Supabase. The app is a Vite + React frontend in 
 - Normalized article content lives in `public.articles` and is scoped by `user_id`.
 - Per-user read/save state lives in `public.user_article_states`.
 - Rows in `feeds` or `articles` with `user_id = null` are intentionally invisible to browser users.
+- Articles older than 30 days by `published_at` are deleted daily by Supabase Cron unless archived/saved, and `sync-feeds` skips already-expired feed items.
 - Supabase email/password auth is implemented. The frontend auth gate and RLS migration should be browser-tested against the hosted project before commit.
 - `sync-feeds` is deployed and inserts articles using Supabase-managed secret keys in the Edge Function environment.
 - `sync-feeds` now expects an authenticated JWT because `supabase/config.toml` has `verify_jwt = true`.
@@ -95,6 +96,7 @@ Important details:
 - Do not deploy with `--no-verify-jwt` unless intentionally reopening sync to anonymous callers.
 - The frontend sends the signed-in session access token when syncing.
 - The function uses Supabase-provided `SUPABASE_URL` and `SUPABASE_SECRET_KEYS`; do not create custom secrets with the reserved `SUPABASE_` prefix.
+- Deploy `sync-feeds` after retention or parsing changes; database migrations do not deploy Edge Functions.
 
 ## Verification Already Run
 
