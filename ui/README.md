@@ -1,4 +1,4 @@
-# Great RSS
+# GreatRSS
 
 Responsive RSS reader backed by Supabase. The app is a Vite + React frontend in this `ui` directory, with Supabase migrations and an Edge Function under `ui/supabase`.
 

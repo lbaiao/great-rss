@@ -49,9 +49,9 @@ export const AuthScreen: React.FC = () => {
       <section className="w-full max-w-5xl grid gap-8 lg:grid-cols-[1.05fr_0.95fr] items-stretch">
         <div className="border border-black bg-primary text-white brutalist-shadow p-8 md:p-10 flex flex-col justify-between min-h-[460px]">
           <div>
-            <p className="text-label-sm text-white/80 mb-4">Private Signal Desk</p>
+            <p className="text-label-sm text-white/80 mb-4">GreatRSS</p>
             <h1 className="text-[56px] md:text-[84px] font-black uppercase leading-[0.82]">
-              Great RSS
+              GreatRSS
             </h1>
           </div>
           <div className="mt-12 border-t border-white/50 pt-6">
