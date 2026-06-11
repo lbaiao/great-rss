@@ -1,12 +1,23 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { View, Article, Feed } from './types';
 import { Sidebar } from './components/Sidebar';
 import { DashboardHeader } from './components/DashboardHeader';
 import { Dashboard } from './components/Dashboard';
 import { SourceManagement } from './components/Sources';
 import { AuthScreen } from './components/AuthScreen';
-import { LayoutDashboard, Rss, Settings } from 'lucide-react';
-import { addFeed, deleteFeed, fetchBootstrap, markAllRead, syncAllFeeds, syncFeed, updateArticle } from './api';
+import { SettingsPanel } from './components/Settings';
+import { BookOpenCheck, LayoutDashboard, Rss, Settings } from 'lucide-react';
+import {
+  addFeed,
+  changePassword,
+  deleteAccount,
+  deleteFeed,
+  fetchBootstrap,
+  markAllRead,
+  syncAllFeeds,
+  syncFeed,
+  updateArticle,
+} from './api';
 import { supabase } from './supabase';
 import type { Session } from '@supabase/supabase-js';
 
@@ -25,6 +36,7 @@ export default function App() {
   const [syncing, setSyncing] = useState(false);
   const [syncingFeedId, setSyncingFeedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const mainRef = useRef<HTMLElement | null>(null);
 
   const showEmptyState = () => {
     setFeeds([]);
@@ -87,17 +99,20 @@ export default function App() {
     category?: string;
     search?: string;
     saved?: boolean;
+    read?: boolean;
     articleId?: string;
   }) => {
     const category = overrides?.category ?? activeCategory;
     const currentSearch = overrides?.search ?? search;
     const saved = overrides?.saved ?? false;
+    const read = overrides?.read ?? false;
     const articleId = overrides?.articleId ?? selectedArticle?.id;
 
     const payload = await fetchBootstrap({
       category: saved ? undefined : category,
       search: currentSearch,
       saved,
+      read,
       articleId,
     });
 
@@ -120,10 +135,12 @@ export default function App() {
 
     setLoading(true);
 
-    if (view === View.ARCHIVE) {
-      void loadState({ saved: true })
+    if (view === View.ARCHIVE || view === View.READ) {
+      void loadState({ saved: view === View.ARCHIVE, read: view === View.READ })
         .then(() => setError(null))
-        .catch((loadError) => handleLoadError(loadError, 'Failed to load saved articles.'))
+        .catch((loadError) =>
+          handleLoadError(loadError, view === View.READ ? 'Failed to load read articles.' : 'Failed to load saved articles.'),
+        )
         .finally(() => setLoading(false));
       return;
     }
@@ -133,6 +150,11 @@ export default function App() {
       .catch((loadError) => handleLoadError(loadError, 'Failed to refresh articles.'))
       .finally(() => setLoading(false));
   }, [activeCategory, authLoading, search, session?.user.id, view]);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    mainRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }, [view]);
 
   useEffect(() => {
     if (!selectedArticle) {
@@ -145,23 +167,6 @@ export default function App() {
     }
   }, [articles, selectedArticle]);
 
-  useEffect(() => {
-    if (!session || !selectedArticle || !selectedArticle.unread) {
-      return;
-    }
-
-    void updateArticle(selectedArticle.id, { unread: false })
-      .then((updated) => {
-        setArticles((current) => current.map((article) => (article.id === updated.id ? updated : article)));
-        setSelectedArticle(updated);
-        setStats((current) => ({
-          ...current,
-          unreadCount: Math.max(0, current.unreadCount - 1),
-        }));
-      })
-      .catch(() => {});
-  }, [selectedArticle?.id, session?.user.id]);
-
   const archiveArticles = articles.filter((article) => article.saved);
 
   const handleSync = async () => {
@@ -169,7 +174,7 @@ export default function App() {
       setSyncing(true);
       setError(null);
       await syncAllFeeds();
-      await loadState({ saved: view === View.ARCHIVE });
+      await loadState({ saved: view === View.ARCHIVE, read: view === View.READ });
     } catch (syncError) {
       setError(toUserFacingError(syncError, 'Sync failed.'));
     } finally {
@@ -180,7 +185,7 @@ export default function App() {
   const handleMarkAllRead = async () => {
     try {
       await markAllRead();
-      await loadState({ saved: view === View.ARCHIVE });
+      await loadState({ saved: view === View.ARCHIVE, read: view === View.READ });
     } catch (markError) {
       setError(toUserFacingError(markError, 'Failed to mark all read.'));
     }
@@ -205,6 +210,32 @@ export default function App() {
       }
 
       setError(toUserFacingError(toggleError, 'Failed to save article.'));
+    }
+  };
+
+  const handleOpenOriginal = async (article: Article) => {
+    if (!article.unread) {
+      return;
+    }
+
+    try {
+      const updated = await updateArticle(article.id, { unread: false });
+      setArticles((current) => {
+        const next = current.map((entry) => (entry.id === updated.id ? updated : entry));
+        return view === View.READ ? next.filter((entry) => !entry.unread) : next;
+      });
+      setSelectedArticle((current) => (current?.id === updated.id ? updated : current));
+      setStats((current) => ({
+        ...current,
+        unreadCount: Math.max(0, current.unreadCount - 1),
+      }));
+    } catch (openError) {
+      if (isEmptyReadableError(openError)) {
+        showEmptyState();
+        return;
+      }
+
+      setError(toUserFacingError(openError, 'Failed to mark article read.'));
     }
   };
 
@@ -243,7 +274,7 @@ export default function App() {
     try {
       setError(null);
       await deleteFeed(feedId);
-      await loadState({ saved: view === View.ARCHIVE });
+      await loadState({ saved: view === View.ARCHIVE, read: view === View.READ });
     } catch (deleteError) {
       setError(toUserFacingError(deleteError, 'Failed to delete source.'));
     }
@@ -257,6 +288,15 @@ export default function App() {
     }
   };
 
+  const handleChangePassword = async (password: string) => {
+    await changePassword(password);
+  };
+
+  const handleDeleteAccount = async () => {
+    await deleteAccount();
+    await supabase.auth.signOut();
+  };
+
   const renderContent = () => {
     switch (view) {
       case View.DASHBOARD:
@@ -267,6 +307,20 @@ export default function App() {
             activeCategory={activeCategory}
             onCategoryChange={setActiveCategory}
             loading={loading}
+            onOpenOriginal={(article) => void handleOpenOriginal(article)}
+          />
+        );
+      case View.READ:
+        return (
+          <Dashboard
+            articles={articles}
+            categories={categories}
+            activeCategory={activeCategory}
+            onCategoryChange={setActiveCategory}
+            loading={loading}
+            onOpenOriginal={(article) => void handleOpenOriginal(article)}
+            title="Read"
+            emptyMessage="Empty. Open original articles to move them here."
           />
         );
       case View.SOURCES:
@@ -280,6 +334,15 @@ export default function App() {
             syncingFeedId={syncingFeedId}
           />
         );
+      case View.SETTINGS:
+        return (
+          <SettingsPanel
+            userEmail={session?.user.email}
+            onChangePassword={handleChangePassword}
+            onDeleteAccount={handleDeleteAccount}
+            onSignOut={() => void handleSignOut()}
+          />
+        );
       case View.HELP:
         return (
           <div className="reading-column py-12">
@@ -289,16 +352,15 @@ export default function App() {
         );
       case View.ARCHIVE:
         return (
-          <div className="reading-column py-12">
-            <h1 className="text-display-lg font-bold mb-4">Archive</h1>
-            <Dashboard
-              articles={archiveArticles}
-              categories={['Saved']}
-              activeCategory="Saved"
-              onCategoryChange={() => {}}
-              loading={loading}
-            />
-          </div>
+          <Dashboard
+            articles={archiveArticles}
+            categories={['Saved']}
+            activeCategory="Saved"
+            onCategoryChange={() => {}}
+            loading={loading}
+            onOpenOriginal={(article) => void handleOpenOriginal(article)}
+            title="Archive"
+          />
         );
       default:
         return (
@@ -308,6 +370,7 @@ export default function App() {
             activeCategory={activeCategory}
             onCategoryChange={setActiveCategory}
             loading={loading}
+            onOpenOriginal={(article) => void handleOpenOriginal(article)}
           />
         );
     }
@@ -343,7 +406,7 @@ export default function App() {
           onSignOut={() => void handleSignOut()}
         />
         
-        <main className="mt-16 px-4 md:px-margin-desktop min-h-[calc(100vh-64px)] overflow-y-auto">
+        <main ref={mainRef} className="mt-16 px-4 md:px-margin-desktop min-h-[calc(100vh-64px)] overflow-y-auto">
           {error && !isEmptyReadableMessage(error) ? (
             <div className="reading-column pt-6">
               <div className="border border-black bg-white px-4 py-3 text-sm font-bold uppercase tracking-wide text-primary">
@@ -364,6 +427,13 @@ export default function App() {
           <LayoutDashboard size={18} strokeWidth={view === View.DASHBOARD ? 3 : 2} />
           <span className="text-[10px] font-bold uppercase tracking-widest leading-none mt-1">Dash</span>
         </button>
+        <button
+          onClick={() => setView(View.READ)}
+          className={`flex flex-col items-center justify-center gap-1 transition-colors ${view === View.READ ? 'text-primary' : 'text-black/40'}`}
+        >
+          <BookOpenCheck size={18} strokeWidth={view === View.READ ? 3 : 2} />
+          <span className="text-[10px] font-bold uppercase tracking-widest leading-none mt-1">Read</span>
+        </button>
         <button 
           onClick={() => setView(View.SOURCES)}
           className={`flex flex-col items-center justify-center gap-1 transition-colors ${view === View.SOURCES ? 'text-primary' : 'text-black/40'}`}
@@ -372,9 +442,10 @@ export default function App() {
           <span className="text-[10px] font-bold uppercase tracking-widest leading-none mt-1">Source</span>
         </button>
         <button 
-          className="flex flex-col items-center justify-center gap-1 text-black/40 transition-colors"
+          onClick={() => setView(View.SETTINGS)}
+          className={`flex flex-col items-center justify-center gap-1 transition-colors ${view === View.SETTINGS ? 'text-primary' : 'text-black/40'}`}
         >
-          <Settings size={18} />
+          <Settings size={18} strokeWidth={view === View.SETTINGS ? 3 : 2} />
           <span className="text-[10px] font-bold uppercase tracking-widest leading-none mt-1">Set</span>
         </button>
       </nav>

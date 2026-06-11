@@ -5,9 +5,10 @@ import { ArrowUpRight } from 'lucide-react';
 
 interface ArticleCardProps {
   article: Article;
+  onOpenOriginal: (article: Article) => void;
 }
 
-export const ArticleCard: React.FC<ArticleCardProps> = ({ article }) => {
+export const ArticleCard: React.FC<ArticleCardProps> = ({ article, onOpenOriginal }) => {
   return (
     <motion.article 
       initial={{ opacity: 0, scale: 0.98 }}
@@ -33,6 +34,7 @@ export const ArticleCard: React.FC<ArticleCardProps> = ({ article }) => {
             href={article.url}
             target="_blank"
             rel="noreferrer"
+            onClick={() => onOpenOriginal(article)}
             className="flex items-center gap-2 border border-black px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] hover:bg-black hover:text-white transition-colors"
           >
             <ArrowUpRight size={14} />

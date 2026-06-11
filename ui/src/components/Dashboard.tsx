@@ -8,6 +8,9 @@ interface DashboardProps {
   activeCategory: string;
   loading: boolean;
   onCategoryChange: (category: string) => void;
+  onOpenOriginal: (article: Article) => void;
+  title?: string;
+  emptyMessage?: string;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
@@ -16,9 +19,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
   activeCategory,
   loading,
   onCategoryChange,
+  onOpenOriginal,
+  title,
+  emptyMessage = 'Empty. Add a source, then sync to load articles.',
 }) => {
   return (
     <div className="reading-column py-12">
+      {title ? <h1 className="text-display-lg font-bold mb-10">{title}</h1> : null}
+
       <div className="flex flex-wrap gap-3 mb-16">
         {categories.map((cat, i) => (
           <button
@@ -44,13 +52,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
         {!loading && articles.length === 0 ? (
           <div className="border border-black bg-white p-8 font-bold uppercase tracking-wide">
-            Empty. Add a source, then sync to load articles.
+            {emptyMessage}
           </div>
         ) : null}
 
         {articles.map((article, index) => (
           <React.Fragment key={article.id}>
-            <ArticleCard article={article} />
+            <ArticleCard article={article} onOpenOriginal={onOpenOriginal} />
             {index === 1 && (
               <div className="my-8 relative overflow-hidden group">
                 <img 

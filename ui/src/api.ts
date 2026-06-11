@@ -31,6 +31,7 @@ type ArticleRow = {
 type ArticleStateRow = {
   article_id: string;
   unread: boolean;
+  read_at: string | null;
   saved: boolean;
 };
 
@@ -38,6 +39,7 @@ export function fetchBootstrap(params?: {
   category?: string;
   search?: string;
   saved?: boolean;
+  read?: boolean;
   articleId?: string;
 }) {
   return loadBootstrap(params);
@@ -86,20 +88,58 @@ export async function deleteFeed(feedId: string) {
   return { ok: true as const };
 }
 
+export async function changePassword(password: string) {
+  const { error } = await supabase.auth.updateUser({ password });
+
+  if (error) {
+    throwApiError(error.message);
+  }
+
+  return { ok: true as const };
+}
+
+export async function deleteAccount() {
+  const { data } = await supabase.auth.getSession();
+  const accessToken = data.session?.access_token;
+
+  if (!accessToken) {
+    throw new Error('Sign in required.');
+  }
+
+  const response = await fetch(`${getFunctionsBaseUrl()}/delete-account`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ confirm: true }),
+  });
+
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+    throwApiError(payload?.error || `Delete account failed with status ${response.status}.`);
+  }
+
+  return { ok: true as const };
+}
+
 export async function updateArticle(articleId: string, patch: Partial<Pick<Article, 'unread' | 'saved'>>) {
   const userId = await requireCurrentUserId();
   const currentState = await loadArticleState(userId, articleId);
+  const nextUnread = typeof patch.unread === 'boolean' ? patch.unread : currentState?.unread ?? true;
   const nextState = {
     user_id: userId,
     article_id: articleId,
-    unread: typeof patch.unread === 'boolean' ? patch.unread : currentState?.unread ?? true,
+    unread: nextUnread,
+    read_at: nextUnread ? null : currentState?.read_at ?? new Date().toISOString(),
     saved: typeof patch.saved === 'boolean' ? patch.saved : currentState?.saved ?? false,
   };
 
   const { data: state, error } = await supabase
     .from('user_article_states')
     .upsert(nextState, { onConflict: 'user_id,article_id' })
-    .select('article_id, unread, saved')
+    .select('article_id, unread, read_at, saved')
     .single();
 
   if (error) {
@@ -113,7 +153,7 @@ export async function markAllRead() {
   const userId = await requireCurrentUserId();
   const [{ data: articles, error: articlesError }, { data: states, error: statesError }] = await Promise.all([
     supabase.from('articles').select('id'),
-    supabase.from('user_article_states').select('article_id, unread, saved').eq('user_id', userId),
+    supabase.from('user_article_states').select('article_id, unread, read_at, saved').eq('user_id', userId),
   ]);
 
   if (articlesError) {
@@ -131,6 +171,7 @@ export async function markAllRead() {
       user_id: userId,
       article_id: article.id,
       unread: false,
+      read_at: current?.read_at ?? new Date().toISOString(),
       saved: current?.saved ?? false,
     };
   });
@@ -152,6 +193,7 @@ async function loadBootstrap(params?: {
   category?: string;
   search?: string;
   saved?: boolean;
+  read?: boolean;
   articleId?: string;
 }): Promise<BootstrapPayload> {
   const userId = await requireCurrentUserId();
@@ -168,7 +210,7 @@ async function loadBootstrap(params?: {
       .order('published_at', { ascending: false }),
     supabase
       .from('user_article_states')
-      .select('article_id, unread, saved')
+      .select('article_id, unread, read_at, saved')
       .eq('user_id', userId),
   ]);
 
@@ -189,6 +231,12 @@ async function loadBootstrap(params?: {
 
   if (params?.saved) {
     articles = articles.filter((article) => article.saved);
+  }
+
+  if (params?.read) {
+    articles = articles
+      .filter((article) => !article.unread)
+      .sort((a, b) => getSortableTime(b.readAt) - getSortableTime(a.readAt));
   }
 
   if (params?.category && params.category !== 'All News') {
@@ -264,7 +312,7 @@ async function requireCurrentUserId() {
 async function loadArticleState(userId: string, articleId: string) {
   const { data, error } = await supabase
     .from('user_article_states')
-    .select('article_id, unread, saved')
+    .select('article_id, unread, read_at, saved')
     .eq('user_id', userId)
     .eq('article_id', articleId)
     .maybeSingle();
@@ -319,6 +367,7 @@ function mapArticle(row: ArticleRow, state?: ArticleStateRow | null): Article {
     timeAgo: formatTimeAgo(row.published_at),
     unread: state?.unread ?? true,
     saved: state?.saved ?? false,
+    readAt: state?.read_at ?? null,
     imageUrl: row.image_url ?? undefined,
     tags: row.tags ?? [],
     url: row.url,
@@ -327,6 +376,10 @@ function mapArticle(row: ArticleRow, state?: ArticleStateRow | null): Article {
 
 function buildCategories(articles: Article[]) {
   return ['All News', ...Array.from(new Set(articles.map((article) => article.category).filter(Boolean)))];
+}
+
+function getSortableTime(isoString: string | null) {
+  return isoString ? Date.parse(isoString) : 0;
 }
 
 function throwApiError(message: string): never {
