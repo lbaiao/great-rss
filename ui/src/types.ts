@@ -42,6 +42,7 @@ export enum View {
   DASHBOARD = 'DASHBOARD',
   READER = 'READER',
   SOURCES = 'SOURCES',
+  SETTINGS = 'SETTINGS',
   HELP = 'HELP',
   ARCHIVE = 'ARCHIVE'
 }
