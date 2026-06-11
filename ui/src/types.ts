@@ -11,6 +11,7 @@ export type Article = {
   readTime: string;
   timeAgo: string;
   unread: boolean;
+  readAt: string | null;
   saved: boolean;
   imageUrl?: string;
   tags: string[];
@@ -41,6 +42,7 @@ export type BootstrapPayload = {
 export enum View {
   DASHBOARD = 'DASHBOARD',
   READER = 'READER',
+  READ = 'READ',
   SOURCES = 'SOURCES',
   SETTINGS = 'SETTINGS',
   HELP = 'HELP',
