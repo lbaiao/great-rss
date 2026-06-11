@@ -38,6 +38,7 @@ Useful commands from `ui`:
 ```bash
 supabase db push
 supabase functions deploy sync-feeds
+supabase functions deploy delete-account
 supabase migration list
 supabase db advisors --linked --fail-on none
 ```
@@ -97,6 +98,7 @@ Important details:
 - The frontend sends the signed-in session access token when syncing.
 - The function uses Supabase-provided `SUPABASE_URL` and `SUPABASE_SECRET_KEYS`; do not create custom secrets with the reserved `SUPABASE_` prefix.
 - Deploy `sync-feeds` after retention or parsing changes; database migrations do not deploy Edge Functions.
+- Deploy `delete-account` after account deletion changes. Its gateway JWT verification is disabled so browser CORS preflight requests can succeed, but the function verifies the signed-in user's bearer token before deleting the Auth user server-side.
 
 ## Verification Already Run
 

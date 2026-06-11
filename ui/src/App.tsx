@@ -5,8 +5,19 @@ import { DashboardHeader } from './components/DashboardHeader';
 import { Dashboard } from './components/Dashboard';
 import { SourceManagement } from './components/Sources';
 import { AuthScreen } from './components/AuthScreen';
+import { SettingsPanel } from './components/Settings';
 import { LayoutDashboard, Rss, Settings } from 'lucide-react';
-import { addFeed, deleteFeed, fetchBootstrap, markAllRead, syncAllFeeds, syncFeed, updateArticle } from './api';
+import {
+  addFeed,
+  changePassword,
+  deleteAccount,
+  deleteFeed,
+  fetchBootstrap,
+  markAllRead,
+  syncAllFeeds,
+  syncFeed,
+  updateArticle,
+} from './api';
 import { supabase } from './supabase';
 import type { Session } from '@supabase/supabase-js';
 
@@ -257,6 +268,15 @@ export default function App() {
     }
   };
 
+  const handleChangePassword = async (password: string) => {
+    await changePassword(password);
+  };
+
+  const handleDeleteAccount = async () => {
+    await deleteAccount();
+    await supabase.auth.signOut();
+  };
+
   const renderContent = () => {
     switch (view) {
       case View.DASHBOARD:
@@ -278,6 +298,15 @@ export default function App() {
             onDeleteFeed={(feedId) => void handleDeleteFeed(feedId)}
             syncing={syncing}
             syncingFeedId={syncingFeedId}
+          />
+        );
+      case View.SETTINGS:
+        return (
+          <SettingsPanel
+            userEmail={session?.user.email}
+            onChangePassword={handleChangePassword}
+            onDeleteAccount={handleDeleteAccount}
+            onSignOut={() => void handleSignOut()}
           />
         );
       case View.HELP:
@@ -372,9 +401,10 @@ export default function App() {
           <span className="text-[10px] font-bold uppercase tracking-widest leading-none mt-1">Source</span>
         </button>
         <button 
-          className="flex flex-col items-center justify-center gap-1 text-black/40 transition-colors"
+          onClick={() => setView(View.SETTINGS)}
+          className={`flex flex-col items-center justify-center gap-1 transition-colors ${view === View.SETTINGS ? 'text-primary' : 'text-black/40'}`}
         >
-          <Settings size={18} />
+          <Settings size={18} strokeWidth={view === View.SETTINGS ? 3 : 2} />
           <span className="text-[10px] font-bold uppercase tracking-widest leading-none mt-1">Set</span>
         </button>
       </nav>

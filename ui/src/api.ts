@@ -86,6 +86,42 @@ export async function deleteFeed(feedId: string) {
   return { ok: true as const };
 }
 
+export async function changePassword(password: string) {
+  const { error } = await supabase.auth.updateUser({ password });
+
+  if (error) {
+    throwApiError(error.message);
+  }
+
+  return { ok: true as const };
+}
+
+export async function deleteAccount() {
+  const { data } = await supabase.auth.getSession();
+  const accessToken = data.session?.access_token;
+
+  if (!accessToken) {
+    throw new Error('Sign in required.');
+  }
+
+  const response = await fetch(`${getFunctionsBaseUrl()}/delete-account`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ confirm: true }),
+  });
+
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+    throwApiError(payload?.error || `Delete account failed with status ${response.status}.`);
+  }
+
+  return { ok: true as const };
+}
+
 export async function updateArticle(articleId: string, patch: Partial<Pick<Article, 'unread' | 'saved'>>) {
   const userId = await requireCurrentUserId();
   const currentState = await loadArticleState(userId, articleId);

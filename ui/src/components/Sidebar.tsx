@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, Rss, HelpCircle, Archive, Plus } from 'lucide-react';
+import { LayoutDashboard, Rss, HelpCircle, Archive, Plus, Settings } from 'lucide-react';
 import { View } from '../types';
 import { motion } from 'motion/react';
 
@@ -15,6 +15,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange }) =>
   ];
 
   const footerItems = [
+    { id: View.SETTINGS, label: 'Settings', icon: Settings },
     { id: View.HELP, label: 'Help', icon: HelpCircle },
     { id: View.ARCHIVE, label: 'Archive', icon: Archive },
   ];

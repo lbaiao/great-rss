@@ -409,3 +409,6 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 
 [functions.sync-feeds]
 verify_jwt = true
+
+[functions.delete-account]
+verify_jwt = false
